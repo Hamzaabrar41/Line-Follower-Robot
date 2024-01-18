@@ -1,0 +1,191 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SD.h>
+
+// Define constants for pin assignments
+const int leftIRPin = 0;        // Left IR sensor pin
+const int rightIRPin = 1;       // Right IR sensor pin
+const int leftMotorInput1 = 2;  // L298 input 1
+const int leftMotorInput2 = 3;  // L298 input 2
+const int rightMotorInput1 = 4; // L298 input 3
+const int rightMotorInput2 = 5; // L298 input 4
+const int enableLeftMotor = 6;  // L298 Enable A
+const int enableRightMotor = 9; // L298 Enable B
+const int trigPin = A4;         // Ultrasonic sensor trigger pin
+const int echoPin = A5;         // Ultrasonic sensor echo pin
+const int emergencyButton = 7;  // Emergency button pin
+const int voltageSensorPin = A2; // Voltage sensor pin
+const int currentSensorPin = A3; // Current sensor pin
+const int sdCardChipSelect = 10; // SD card CS pin
+
+// Define thresholds for black line detection
+const int thresholdLeft = 500; // Adjust this threshold based on your sensor readings
+const int thresholdRight = 500;
+
+// Define distance threshold for ultrasonic sensor
+const int distanceThreshold = 10; // Distance in centimeters
+
+// Flag to indicate emergency stop
+volatile bool emergencyStop = false;
+
+// Variables for voltage and current readings
+float voltageReading = 0.0;
+float currentReading = 0.0;
+
+// LCD Configuration
+LiquidCrystal_I2C lcd(0x27, 16, 2); // I2C address, 16 columns, 2 rows
+
+// SD card file
+File dataFile;
+
+// Function to stop both motors
+void stopMotors() {
+  digitalWrite(enableLeftMotor, LOW);
+  digitalWrite(enableRightMotor, LOW);
+}
+
+// Function to move forward
+void moveForward() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, HIGH);
+  digitalWrite(leftMotorInput2, LOW);
+  digitalWrite(rightMotorInput1, HIGH);
+  digitalWrite(rightMotorInput2, LOW);
+}
+
+// Function to turn left
+void turnLeft() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, LOW);
+  digitalWrite(leftMotorInput2, HIGH);
+  digitalWrite(rightMotorInput1, HIGH);
+  digitalWrite(rightMotorInput2, LOW);
+}
+
+// Function to turn right
+void turnRight() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, HIGH);
+  digitalWrite(leftMotorInput2, LOW);
+  digitalWrite(rightMotorInput1, LOW);
+  digitalWrite(rightMotorInput2, HIGH);
+}
+
+// Interrupt service routine for the emergency button
+void emergencyStopInterrupt() {
+  emergencyStop = true;
+}
+
+void setup() {
+  pinMode(leftIRPin, INPUT);
+  pinMode(rightIRPin, INPUT);
+  pinMode(leftMotorInput1, OUTPUT);
+  pinMode(leftMotorInput2, OUTPUT);
+  pinMode(rightMotorInput1, OUTPUT);
+  pinMode(rightMotorInput2, OUTPUT);
+  pinMode(enableLeftMotor, OUTPUT);
+  pinMode(enableRightMotor, OUTPUT);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(emergencyButton, INPUT_PULLUP);
+
+  // Attach the interrupt for the emergency button
+  attachInterrupt(digitalPinToInterrupt(emergencyButton), emergencyStopInterrupt, FALLING);
+
+  // LCD Setup
+  lcd.begin(16, 2);
+
+  // SD card setup
+  if (SD.begin(sdCardChipSelect)) {
+    Serial.println("SD card initialized.");
+  } else {
+    Serial.println("Error initializing SD card.");
+    return;
+  }
+
+  // Open a file for writing
+  dataFile = SD.open("data.txt", FILE_WRITE);
+  if (dataFile) {
+    dataFile.println("Voltage,Current"); // Header
+    dataFile.close();
+  } else {
+    Serial.println("Error opening file for writing.");
+  }
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Check for emergency stop
+  if (emergencyStop) {
+    stopMotors();
+    // You can add additional emergency stop actions if needed
+    while (digitalRead(emergencyButton) == LOW) {
+      // Wait for the button to be released
+    }
+    emergencyStop = false;
+  }
+
+  // Read sensor values
+  int leftSensorValue = analogRead(leftIRPin);
+  int rightSensorValue = analogRead(rightIRPin);
+
+  // Read distance from ultrasonic sensor
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  float duration = pulseIn(echoPin, HIGH);
+  float distance = duration * 0.034 / 2;
+
+  // Read voltage and current
+  voltageReading = analogRead(voltageSensorPin) * (5.0 / 1023.0);
+  currentReading = analogRead(currentSensorPin) * (5.0 / 1023.0);
+
+  // Display readings on LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Voltage: ");
+  lcd.print(voltageReading, 2);
+  lcd.setCursor(0, 1);
+  lcd.print("Current: ");
+  lcd.print(currentReading, 2);
+
+  // Line following logic
+  if (leftSensorValue < thresholdLeft && rightSensorValue < thresholdRight) {
+    // Both sensors on the line - move forward
+    moveForward();
+  } else if (leftSensorValue < thresholdLeft) {
+    // Left sensor on the line - turn right
+    turnRight();
+  } else if (rightSensorValue < thresholdRight) {
+    // Right sensor on the line - turn left
+    turnLeft();
+  } else {
+    // Both sensors off the line - stop
+    stopMotors();
+  }
+
+  // Obstacle detection
+  if (distance < distanceThreshold) {
+    // Stop motors if obstacle is detected
+    stopMotors();
+  }
+
+  // Write sensor data to SD card
+  dataFile = SD.open("data.txt", FILE_WRITE);
+  if (dataFile) {
+    dataFile.print(voltageReading, 2);
+    dataFile.print(",");
+    dataFile.println(currentReading, 2);
+    dataFile.close();
+  } else {
+    Serial.println("Error opening file for writing.");
+  }
+
+  delay(10); // Adjust delay based on your requirements
+}
