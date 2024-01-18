@@ -1,0 +1,99 @@
+// Define constants for pin assignments
+const int leftIRPin = 0;       // Left IR sensor pin
+const int rightIRPin = 1;      // Right IR sensor pin
+const int leftMotorInput1 = 2; // L298 input 1
+const int leftMotorInput2 = 3; // L298 input 2
+const int rightMotorInput1 = 4;// L298 input 3
+const int rightMotorInput2 = 5;// L298 input 4
+const int enableLeftMotor = 6; // L298 Enable A
+const int enableRightMotor = 9;// L298 Enable B
+const int trigPin = A4;        // Ultrasonic sensor trigger pin
+const int echoPin = A5;        // Ultrasonic sensor echo pin
+const int emergencyButton = 7; // Emergency button pin
+
+// Define thresholds for black line detection
+const int thresholdLeft = 500; // Adjust this threshold based on your sensor readings
+const int thresholdRight = 500;
+
+// Define distance threshold for ultrasonic sensor
+const int distanceThreshold = 10; // Distance in centimeters
+
+// Flag to indicate emergency stop
+volatile bool emergencyStop = false;
+
+// Function to stop both motors
+void stopMotors() {
+  digitalWrite(enableLeftMotor, LOW);
+  digitalWrite(enableRightMotor, LOW);
+}
+
+// Function to move forward
+void moveForward() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, HIGH);
+  digitalWrite(leftMotorInput2, LOW);
+  digitalWrite(rightMotorInput1, HIGH);
+  digitalWrite(rightMotorInput2, LOW);
+}
+
+// Function to turn left
+void turnLeft() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, LOW);
+  digitalWrite(leftMotorInput2, HIGH);
+  digitalWrite(rightMotorInput1, HIGH);
+  digitalWrite(rightMotorInput2, LOW);
+}
+
+// Function to turn right
+void turnRight() {
+  digitalWrite(enableLeftMotor, HIGH);
+  digitalWrite(enableRightMotor, HIGH);
+  digitalWrite(leftMotorInput1, HIGH);
+  digitalWrite(leftMotorInput2, LOW);
+  digitalWrite(rightMotorInput1, LOW);
+  digitalWrite(rightMotorInput2, HIGH);
+}
+
+// Interrupt service routine for the emergency button
+void emergencyStopInterrupt() {
+  emergencyStop = true;
+}
+
+void setup() {
+  pinMode(leftIRPin, INPUT);
+  pinMode(rightIRPin, INPUT);
+  pinMode(leftMotorInput1, OUTPUT);
+  pinMode(leftMotorInput2, OUTPUT);
+  pinMode(rightMotorInput1, OUTPUT);
+  pinMode(rightMotorInput2, OUTPUT);
+  pinMode(enableLeftMotor, OUTPUT);
+  pinMode(enableRightMotor, OUTPUT);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(emergencyButton, INPUT_PULLUP);
+
+  // Attach the interrupt for the emergency button
+  attachInterrupt(digitalPinToInterrupt(emergencyButton), emergencyStopInterrupt, FALLING);
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Check for emergency stop
+  if (emergencyStop) {
+    stopMotors();
+    // You can add additional emergency stop actions if needed
+    while (digitalRead(emergencyButton) == LOW) {
+      // Wait for the button to be released
+    }
+    emergencyStop = false;
+  }
+
+  // Rest of the code remains the same
+  // ...
+
+  delay(10); // Adjust delay based on your requirements
+}
